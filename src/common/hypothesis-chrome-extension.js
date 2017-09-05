@@ -104,6 +104,8 @@ function HypothesisChromeExtension(dependencies) {
     });
   };
 
+  this.tabState = state;
+
   function restoreSavedTabState() {
     store.reload();
     state.load(store.all());

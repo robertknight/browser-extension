@@ -43,7 +43,6 @@ describe('HypothesisChromeExtension', function () {
   var fakeErrors;
   var fakeHelpPage;
   var fakeTabStore;
-  var fakeTabState;
   var fakeBrowserAction;
   var fakeSidebarInjector;
 
@@ -89,21 +88,7 @@ describe('HypothesisChromeExtension', function () {
       unset: sandbox.spy(),
       reload: sandbox.spy(),
     };
-    fakeTabState = {
-      activateTab: sandbox.spy(),
-      deactivateTab: sandbox.spy(),
-      errorTab: sandbox.spy(),
-      previousState: sandbox.spy(),
-      isTabActive: sandbox.stub().returns(false),
-      isTabInactive: sandbox.stub().returns(false),
-      isTabErrored: sandbox.stub().returns(false),
-      getState: sandbox.stub().returns({}),
-      setState: sandbox.spy(),
-      clearTab: sandbox.spy(),
-      load: sandbox.spy(),
-      updateAnnotationCount: sandbox.spy(),
-    };
-    fakeTabState.deactivateTab = sinon.spy();
+
     fakeBrowserAction = {
       update: sandbox.spy(),
     };
@@ -116,13 +101,7 @@ describe('HypothesisChromeExtension', function () {
       report: sandbox.spy(),
     };
 
-    function FakeTabState(initialState, onchange) {
-      fakeTabState.onChangeHandler = onchange;
-    }
-    FakeTabState.prototype = fakeTabState;
-
     HypothesisChromeExtension = proxyquire('../../src/common/hypothesis-chrome-extension', {
-      './tab-state': FakeTabState,
       './tab-store': createConstructor(fakeTabStore),
       './help-page': createConstructor(fakeHelpPage),
       './browser-action': createConstructor(fakeBrowserAction),
@@ -159,19 +138,21 @@ describe('HypothesisChromeExtension', function () {
     it('restores the saved tab states', function () {
       ext.install();
       assert.called(fakeTabStore.reload);
-      assert.calledWith(fakeTabState.load, savedState);
+      assert.match(ext.tabState.getState(1), sinon.match(savedState[1]));
     });
 
     it('applies the saved state to open tabs', function () {
-      fakeTabState.getState = sandbox.stub().returns(savedState[1]);
+      ext.tabState.setState(1, savedState[1]);
       ext.install();
       assert.calledWith(fakeBrowserAction.update, 1, savedState[1]);
     });
   });
 
   describe('.firstRun', function () {
+    var tabId = 1;
+
     beforeEach(function () {
-      fakeChromeTabs.create = sandbox.stub().yields({id: 1});
+      fakeChromeTabs.create = sandbox.stub().yields({id: tabId});
     });
 
     it('opens a new tab pointing to the welcome page', function () {
@@ -184,14 +165,13 @@ describe('HypothesisChromeExtension', function () {
 
     it('sets the browser state to active', function () {
       ext.firstRun({});
-      assert.called(fakeTabState.activateTab);
-      assert.calledWith(fakeTabState.activateTab, 1);
+      assert.equal(ext.tabState.getState(tabId).state, TabState.states.ACTIVE);
     });
 
     it('does not open a new tab for administrative installs', function () {
       ext.firstRun({installType: 'admin'});
       assert.notCalled(fakeChromeTabs.create);
-      assert.notCalled(fakeTabState.activateTab);
+      assert.equal(ext.tabState.getState(tabId).state, TabState.states.INACTIVE);
     });
   });
 
@@ -207,50 +187,31 @@ describe('HypothesisChromeExtension', function () {
 
     describe('when a tab is created', function () {
       beforeEach(function () {
-        fakeTabState.clearTab = sandbox.spy();
+        ext.tabState.clearTab = sandbox.spy();
         ext.listen({addEventListener: sandbox.stub()});
       });
 
       it('clears the new tab state', function () {
         fakeChromeTabs.onCreated.listener({id: 1, url: 'http://example.com/foo.html'});
-        assert.calledWith(fakeTabState.clearTab, 1);
+        assert.calledWith(ext.tabState.clearTab, 1);
       });
     });
 
     describe('when a tab is updated', function () {
-      var tabState = {};
       function createTab(initialState) {
         var tabId = 1;
-        tabState[tabId] = Object.assign({
-          state: TabState.states.INACTIVE,
-          annotationCount: 0,
-          ready: false,
-        }, initialState);
+        ext.tabState.setState(tabId, initialState);
         return {id: tabId, url: 'http://example.com/foo.html', status: 'complete'};
       }
 
       beforeEach(function () {
-        fakeTabState.clearTab = sandbox.spy();
-        fakeTabState.isTabActive = function (tabId) {
-          return tabState[tabId].state === TabState.states.ACTIVE;
-        };
-        fakeTabState.isTabErrored = function (tabId) {
-          return tabState[tabId].state === TabState.states.ERRORED;
-        };
-        fakeTabState.getState = function (tabId) {
-          return tabState[tabId];
-        };
-        fakeTabState.setState = function (tabId, state) {
-          tabState[tabId] = Object.assign(tabState[tabId], state);
-          assert(isValidState(tabState[tabId]));
-        };
         ext.listen({addEventListener: sandbox.stub()});
       });
 
       it('sets the tab state to ready when loading completes', function () {
         var tab = createTab({state: TabState.states.ACTIVE});
         fakeChromeTabs.onUpdated.listener(tab.id, {status: 'complete'}, tab);
-        assert.equal(tabState[tab.id].ready, true);
+        assert.equal(ext.tabState.getState(tab.id).ready, true);
       });
 
       it('resets the tab state when loading', function () {
@@ -260,14 +221,14 @@ describe('HypothesisChromeExtension', function () {
           extensionSidebarInstalled: true,
         });
         fakeChromeTabs.onUpdated.listener(tab.id, {status: 'loading'}, tab);
-        assert.equal(tabState[tab.id].ready, false);
-        assert.equal(tabState[tab.id].extensionSidebarInstalled, false);
+        assert.equal(ext.tabState.getState(tab.id).ready, false);
+        assert.equal(ext.tabState.getState(tab.id).extensionSidebarInstalled, false);
       });
 
       it('resets the tab state to active if errored', function () {
         var tab = createTab({state: TabState.states.ERRORED});
         fakeChromeTabs.onUpdated.listener(tab.id, {status: 'loading'}, tab);
-        assert.equal(tabState[tab.id].state, TabState.states.ACTIVE);
+        assert.equal(ext.tabState.getState(tab.id).state, TabState.states.ACTIVE);
       });
 
       [
@@ -279,7 +240,7 @@ describe('HypothesisChromeExtension', function () {
           tab.url += fragment;
           fakeChromeTabs.onUpdated.listener(tab.id, {status: 'loading'}, tab);
           fakeChromeTabs.onUpdated.listener(tab.id, {status: 'complete'}, tab);
-          assert.equal(tabState[tab.id].state, TabState.states.ACTIVE);
+          assert.equal(ext.tabState.getState(tab.id).state, TabState.states.ACTIVE);
         });
       });
 
@@ -294,7 +255,7 @@ describe('HypothesisChromeExtension', function () {
         tab.url = origURL + '#modified-fragment';
         fakeChromeTabs.onUpdated.listener(tab.id, {status: 'loading'}, tab);
         fakeChromeTabs.onUpdated.listener(tab.id, {status: 'complete'}, tab);
-        assert.equal(tabState[tab.id].state, TabState.states.ACTIVE);
+        assert.equal(ext.tabState.getState(tab.id).state, TabState.states.ACTIVE);
       });
 
       it('updates the badge count', function () {
