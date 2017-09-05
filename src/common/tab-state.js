@@ -2,8 +2,6 @@
 
 var isShallowEqual = require('is-equal-shallow');
 
-var uriInfo = require('./uri-info');
-
 var states = {
   ACTIVE:   'active',
   INACTIVE: 'inactive',
@@ -135,24 +133,6 @@ function TabState(initialState, onchange) {
     if (self.onchange) {
       self.onchange(tabId, newState);
     }
-  };
-
-  /**
-   * Query the server for the annotation count for a URL
-   * and update the annotation count for the tab accordingly.
-   *
-   * @method
-   * @param {integer} tabId The id of the tab.
-   * @param {string} tabUrl The URL of the tab.
-   */
-  this.updateAnnotationCount = function(tabId, tabUrl) {
-    var self = this;
-    return uriInfo.query(tabUrl).then(function (result) {
-      self.setState(tabId, { annotationCount: result.total });
-    }).catch(function (err) {
-      self.setState(tabId, { annotationCount: 0 });
-      console.error('Failed to fetch annotation count for %s: %s', tabUrl, err);
-    });
   };
 
   this.load(initialState || {});

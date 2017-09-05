@@ -119,6 +119,7 @@ describe('TabState', function () {
     });
   });
 
+  // FIXME - Move these tests out.
   describe('.updateAnnotationCount', function () {
     beforeEach(function () {
       sinon.stub(console, 'error');

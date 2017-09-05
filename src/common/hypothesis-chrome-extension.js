@@ -8,6 +8,7 @@ var TabStore = require('./tab-store');
 var directLinkQuery = require('./direct-link-query');
 var errors = require('./errors');
 var settings = require('./settings');
+var uriInfo = require('./uri-info');
 
 var TAB_STATUS_LOADING = 'loading';
 var TAB_STATUS_COMPLETE = 'complete';
@@ -284,6 +285,22 @@ function HypothesisChromeExtension(dependencies) {
     }
   }
 
+  /**
+   * Query the server for the annotation count for a URL
+   * and update the annotation count for the tab accordingly.
+   *
+   * @param {number} tabId The id of the tab.
+   * @param {string} tabUrl The URL of the tab.
+   */
+  function updateAnnotationCount(tabId, tabUrl) {
+    return uriInfo.query(tabUrl).then(result => {
+      state.setState(tabId, { annotationCount: result.total });
+    }).catch(err => {
+      state.setState(tabId, { annotationCount: 0 });
+      console.error('Failed to fetch annotation count for %s: %s', tabUrl, err);
+    });
+  }
+
   function updateAnnotationCountIfEnabled(tabId, url) {
     if (!chromeStorage.sync) {
       // Firefox < 53 does not support `chrome.storage.sync`.
@@ -295,7 +312,7 @@ function HypothesisChromeExtension(dependencies) {
       badge: true,
     }, function (items) {
       if (items.badge) {
-        state.updateAnnotationCount(tabId, url);
+        updateAnnotationCount(tabId, url);
       }
     });
   }
