@@ -9,25 +9,11 @@ import { TabState } from './tab-state';
 import { TabStore } from './tab-store';
 
 /**
- * The main extension application. This wires together all the smaller
- * modules. The app listens to all new created/updated/removed tab events
- * and uses the TabState object to keep track of whether the sidebar is
- * active or inactive in the tab. The app also listens to click events on
- * the browser action and toggles the state and uses the BrowserAction module
- * to update the visual style of the button.
- *
- * The SidebarInjector handles the insertion of the Hypothesis code. If it
- * runs into errors the tab is put into an errored state and when the
- * browser action is clicked again the HelpPage module displays more
- * information to the user.
- *
- * Lastly the TabStore listens to changes to the TabState module and persists
- * the current settings to localStorage. This is then loaded into the
- * application on startup.
+ * The main extension application.
  */
 export default function HypothesisChromeExtension() {
   const help = new HelpPage();
-  const store = new TabStore(localStorage);
+  const store = new TabStore();
   const state = new TabState(store.all(), onTabStateChange);
   const browserAction = new BrowserAction();
   const sidebar = new SidebarInjector();

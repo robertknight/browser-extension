@@ -8,6 +8,11 @@
  *  - Provide a seam that can be easily mocked in tests
  */
 
+/** @param {Function} fn */
+function toIIFEString(fn) {
+  return '(' + fn.toString() + ')()';
+}
+
 /**
  * Wrap the browser APIs exposed via the `chrome` object to return promises.
  *
@@ -76,15 +81,21 @@ export function getChromeAPI(chrome = globalThis.chrome) {
     return promisify(fn);
   };
 
+  const browserAction = chrome.browserAction ?? chrome.action;
+  const executeScript = chrome.scripting.executeScript;
+
+  // TODO - Fallback for MV2
+
   return {
     browserAction: {
-      onClicked: chrome.browserAction.onClicked,
-      setBadgeBackgroundColor: promisify(
-        chrome.browserAction.setBadgeBackgroundColor
-      ),
-      setBadgeText: promisify(chrome.browserAction.setBadgeText),
-      setIcon: promisify(chrome.browserAction.setIcon),
-      setTitle: promisify(chrome.browserAction.setTitle),
+      onClicked: browserAction.onClicked,
+      setBadgeBackgroundColor: promisify(browserAction.setBadgeBackgroundColor),
+      setBadgeText: promisify(browserAction.setBadgeText),
+
+      // @ts-ignore - Ignore an incorrect typing error about setIcon's callback
+      setIcon: promisify(browserAction.setIcon),
+
+      setTitle: promisify(browserAction.setTitle),
     },
 
     extension: {
@@ -117,13 +128,16 @@ export function getChromeAPI(chrome = globalThis.chrome) {
     tabs: {
       create: promisify(chrome.tabs.create),
       get: promisifyAlt(chrome.tabs.get),
-      executeScript: promisify(chrome.tabs.executeScript),
       onCreated: chrome.tabs.onCreated,
       onReplaced: chrome.tabs.onReplaced,
       onRemoved: chrome.tabs.onRemoved,
       onUpdated: chrome.tabs.onUpdated,
       query: promisifyAlt(chrome.tabs.query),
       update: promisify(chrome.tabs.update),
+    },
+
+    scripting: {
+      executeScript,
     },
 
     storage: {

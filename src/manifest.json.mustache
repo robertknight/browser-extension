@@ -5,7 +5,7 @@
   {{#browserIsChrome}}
   "version_name": "{{ version }} ({{ versionName }})",
   {{/browserIsChrome}}
-  "manifest_version": 2,
+  "manifest_version": 3,
 
   {{#browserIsChrome}}
   "minimum_chrome_version": "64",
@@ -40,8 +40,7 @@
   {{/browserIsChrome}}
 
   "options_ui": {
-    "page": "options/index.html",
-    "chrome_style": true
+    "page": "options/index.html"
   },
 
   {{#browserIsChrome}}
@@ -49,28 +48,22 @@
   {{/browserIsChrome}}
 
   "permissions": [
-    "<all_urls>",
-
+    "scripting",
     "storage",
     "tabs"
   ],
+
+  "host_permissions": ["<all_urls>"],
 
   "optional_permissions": [
     {{! Used to enumerate frames on certain websites. }}
     "webNavigation"
   ],
 
-  "content_security_policy": "script-src 'self'; object-src 'self'",
-
   "background": {
-    {{#browserIsChrome}}
-    "persistent": true,
-    {{/browserIsChrome}}
-    "scripts": [
-      "extension.bundle.js"
-    ]
+    "service_worker": "extension.bundle.js"
   },
-  "browser_action": {
+  "action": {
     "default_icon": {
       "19": "images/browser-icon-inactive.png",
       "38": "images/browser-icon-inactive@2x.png"
@@ -84,9 +77,14 @@
   {{/browserIsChrome}}
 
   "web_accessible_resources": [
-    "client/*",
-    "help/*",
-    "pdfjs/*",
-    "pdfjs/web/viewer.html"
+    {
+      "resources": [
+        "client/*",
+        "help/*",
+        "pdfjs/*",
+        "pdfjs/web/viewer.html"
+      ],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

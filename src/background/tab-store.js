@@ -7,10 +7,8 @@
  * Note: This could also be used to persist the state across browser sessions,
  * for that to work however the storage key would need to be changed.
  * The tab ID is currently used but this is valid only for a browser session.
- *
- * @param {Storage} storage
  */
-export function TabStore(storage) {
+export function TabStore() {
   const key = 'state';
 
   /** @type {Record<number, Partial<TabState>>} */
@@ -36,13 +34,15 @@ export function TabStore(storage) {
       state: value.state,
       annotationCount: value.annotationCount,
     };
-    storage.setItem(key, JSON.stringify(local));
+    // TODO (Manifest V3) - Migrate to extension storage
+    // storage.setItem(key, JSON.stringify(local));
   };
 
   /** @param {number} tabId */
   this.unset = function (tabId) {
     delete local[tabId];
-    storage.setItem(key, JSON.stringify(local));
+    // TODO (Manifest V3) - Migrate to extension storage
+    // storage.setItem(key, JSON.stringify(local));
   };
 
   this.all = function () {
@@ -53,7 +53,9 @@ export function TabStore(storage) {
   this.reload = tabIds => {
     try {
       local = {};
-      const jsonStr = storage.getItem(key);
+      // TODO (Manifest V3) - Migrate to extension storage
+      // const jsonStr = storage.getItem(key);
+      const jsonStr = null;
       if (!jsonStr) {
         return;
       }

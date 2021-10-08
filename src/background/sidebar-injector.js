@@ -11,44 +11,15 @@ const CONTENT_TYPE_HTML = 'HTML';
 const CONTENT_TYPE_PDF = 'PDF';
 const CONTENT_TYPE_VITALSOURCE = 'VITALSOURCE';
 
-/** @param {Function} fn */
-function toIIFEString(fn) {
-  return '(' + fn.toString() + ')()';
-}
-
 /**
- * Adds a <script> tag containing JSON config data to the page.
- *
- * Note that this function is stringified and injected into the page via a
- * content script, so it cannot reference any external variables.
- *
- * @param {string} name
- * @param {string} content
+ * @param {object} config
  */
-/* istanbul ignore next */
-function addJSONScriptTag(name, content) {
-  const scriptTag = document.createElement('script');
-  scriptTag.className = name;
-  scriptTag.textContent = content;
-  scriptTag.type = 'application/json';
-  document.head.appendChild(scriptTag);
-}
-
-/**
- * Extract the value returned by a content script injected via
- * chrome.tabs.executeScript() into the main frame of a page.
- *
- * executeScript() returns an array of results, one per frame which the script
- * was injected into. If a frame fails to execute the script the array entry will
- * have a value of `null`.
- *
- * See https://developer.chrome.com/extensions/tabs#method-executeScript
- *
- * @template T
- * @param {Array<T>} result
- */
-function extractContentScriptResult(result) {
-  return /** @type{T|null} */ (result[0]);
+function setClientConfig(config) {
+  const script = document.createElement('script');
+  script.className = 'js-hypothesis-config';
+  script.type = 'application/json';
+  script.textContent = JSON.stringify(config);
+  document.head.appendChild(script);
 }
 
 /**
@@ -183,11 +154,11 @@ export function SidebarInjector() {
 
     const canInject = await canInjectScript(tab.url);
     if (canInject) {
-      /** @type {Array<{ type: string }>} */
-      const frameResults = await chromeAPI.tabs.executeScript(tab.id, {
-        code: toIIFEString(detectContentType),
+      const frameResults = await chromeAPI.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: detectContentType,
       });
-      const result = extractContentScriptResult(frameResults);
+      const result = frameResults[0].result;
       if (result) {
         return result.type;
       } else {
@@ -270,7 +241,7 @@ export function SidebarInjector() {
     } else {
       await injectConfig(tab.id, config);
       const results = await injectIntoHTML(tab);
-      const result = extractContentScriptResult(results);
+      const result = results[0].result;
       if (
         typeof result?.installedURL === 'string' &&
         !result.installedURL.includes(chromeAPI.runtime.getURL('/'))
@@ -302,8 +273,9 @@ export function SidebarInjector() {
 
   /** @param {Tab} tab */
   function injectIntoHTML(tab) {
-    return chromeAPI.tabs.executeScript(tab.id, {
-      file: '/client/build/boot.js',
+    return chromeAPI.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['/client/build/boot.js'],
     });
   }
 
@@ -333,7 +305,10 @@ export function SidebarInjector() {
     if (!isSupportedURL(tab.url)) {
       return Promise.resolve();
     }
-    return chromeAPI.tabs.executeScript(tab.id, { file: '/unload-client.js' });
+    return chromeAPI.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['/unload-client.js'],
+    });
   }
 
   /**
@@ -392,10 +367,10 @@ export function SidebarInjector() {
     if (!frame) {
       throw new Error('Book viewer frame not found');
     }
-    await injectConfig(tab.id, config, { frameId: frame.frameId });
-    await chromeAPI.tabs.executeScript(tab.id, {
-      file: '/client/build/boot.js',
-      frameId: frame.frameId,
+    await injectConfig(tab.id, config, frame.frameId);
+    await chromeAPI.scripting.executeScript({
+      target: { tabId: tab.id, frameIds: [frame.frameId] },
+      files: ['/client/build/boot.js'],
     });
   }
 
@@ -405,29 +380,29 @@ export function SidebarInjector() {
     if (!frame) {
       return;
     }
-    await chromeAPI.tabs.executeScript(tab.id, {
-      file: '/unload-client.js',
-      frameId: frame.frameId,
+    await chromeAPI.scripting.executeScript({
+      target: { tabId: tab.id, frameIds: [frame.frameId] },
+      files: ['/unload-client.js'],
     });
   }
 
   /**
-   * Inject configuration information for the Hypothesis application
-   * into the page as JSON data via a <meta> tag.
-   *
-   * A <meta> tag is used because that makes it available to JS content
-   * running in isolated worlds.
+   * Inject configuration for the Hypothesis client into the page via a
+   * JSON <script> tag.
    *
    * @param {number} tabId
    * @param {object} clientConfig
-   * @param {chrome.tabs.InjectDetails} options
+   * @param {number} [frameId]
    */
-  function injectConfig(tabId, clientConfig, options = {}) {
-    const configStr = JSON.stringify(clientConfig).replace(/"/g, '\\"');
-    const configCode = `var hypothesisConfig="${configStr}";\n(${addJSONScriptTag})("js-hypothesis-config", hypothesisConfig);\n`;
-    return chromeAPI.tabs.executeScript(tabId, {
-      code: configCode,
-      ...options,
+  function injectConfig(tabId, clientConfig, frameId) {
+    const targetOpts = {};
+    if (frameId !== undefined) {
+      targetOpts.frameIds = [frameId];
+    }
+    return chromeAPI.scripting.executeScript({
+      target: { tabId, ...targetOpts },
+      func: setClientConfig,
+      args: [clientConfig],
     });
   }
 }
