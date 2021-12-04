@@ -6,7 +6,6 @@ import { HelpPage } from './help-page';
 import settings from './settings';
 import { SidebarInjector } from './sidebar-injector';
 import { TabState } from './tab-state';
-import { TabStore } from './tab-store';
 
 /**
  * The main extension application. This wires together all the smaller
@@ -28,15 +27,12 @@ import { TabStore } from './tab-store';
 export class Extension {
   constructor() {
     const help = new HelpPage();
-    const store = new TabStore(localStorage);
-    const state = new TabState(store.all(), onTabStateChange);
+    const state = new TabState(onTabStateChange);
     const browserAction = new BrowserAction();
     const sidebar = new SidebarInjector();
 
     /** @type {Map<number, string>} */
     const currentlyLoadingUrl = new Map(); // keeps tracks of what URL each tab is loading
-
-    restoreSavedTabState();
 
     /**
      * Sets up the extension and binds event listeners. Requires a window
@@ -57,14 +53,6 @@ export class Extension {
       chromeAPI.tabs.onReplaced.addListener(onTabReplaced);
 
       chromeAPI.tabs.onRemoved.addListener(onTabRemoved);
-    };
-
-    /**
-     * A method that can be used to setup the extension on existing tabs
-     * when the extension is re-installed.
-     */
-    this.install = async () => {
-      await restoreSavedTabState();
     };
 
     /**
@@ -94,42 +82,52 @@ export class Extension {
       state.activateTab(/** @type {number} */ (tab.id));
     };
 
-    async function restoreSavedTabState() {
+    /**
+     * Update cached state for current browser tabs by querying each tab to see
+     * whether the client is currently loaded there.
+     *
+     * This should be called when the extension is loaded or reloaded.
+     */
+    this.initTabStates = async () => {
       const tabs = await chromeAPI.tabs.query({});
-      const tabIds = tabs
-        .filter(tab => tab.id !== undefined)
-        .map(({ id }) => /** @type {number} */ (id));
-      store.reload(tabIds);
-      state.load(store.all());
-      tabIds.forEach(tabId => {
-        onTabStateChange(tabId, state.getState(tabId));
-      });
-    }
+      for (let tab of tabs) {
+        if (!tab.id) {
+          continue;
+        }
+
+        const isActive = await sidebar.isClientActiveInTab(tab);
+
+        state.setState(tab.id, {
+          state: isActive ? 'active' : 'inactive',
+          extensionSidebarInstalled: isActive,
+
+          // We assume all existing tabs are loaded, although this may not be the
+          // case.
+          ready: true,
+        });
+      }
+    };
 
     /**
      * @param {number} tabId
      * @param {import('./tab-state').State | undefined} current
      */
     async function onTabStateChange(tabId, current) {
-      if (current) {
-        let tab;
-        try {
-          tab = await chromeAPI.tabs.get(tabId);
-        } catch {
-          state.clearTab(tabId);
-          return;
-        }
-
-        browserAction.update(tabId, current);
-
-        updateTabDocument(tab);
-
-        if (!state.isTabErrored(tabId)) {
-          store.set(tabId, current);
-        }
-      } else {
-        store.unset(tabId);
+      if (!current) {
+        return;
       }
+
+      let tab;
+      try {
+        tab = await chromeAPI.tabs.get(tabId);
+      } catch {
+        state.clearTab(tabId);
+        return;
+      }
+
+      browserAction.update(tabId, current);
+
+      updateTabDocument(tab);
     }
 
     // exposed for use by tests

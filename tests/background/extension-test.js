@@ -37,7 +37,6 @@ describe('Extension', function () {
   let fakeChromeAPI;
   let fakeErrors;
   let fakeHelpPage;
-  let fakeTabStore;
   let fakeTabState;
   let fakeBrowserAction;
   let fakeSidebarInjector;
@@ -72,12 +71,6 @@ describe('Extension', function () {
     fakeHelpPage = {
       showHelpForError: sandbox.spy(),
     };
-    fakeTabStore = {
-      all: sandbox.spy(),
-      set: sandbox.spy(),
-      unset: sandbox.spy(),
-      reload: sandbox.spy(),
-    };
     fakeTabState = {
       activateTab: sandbox.spy(),
       deactivateTab: sandbox.spy(),
@@ -97,6 +90,7 @@ describe('Extension', function () {
       update: sandbox.spy(),
     };
     fakeSidebarInjector = {
+      isClientActiveInTab: sandbox.stub().resolves(false),
       injectIntoTab: sandbox.stub().returns(Promise.resolve()),
       removeFromTab: sandbox.stub().returns(Promise.resolve()),
     };
@@ -116,7 +110,6 @@ describe('Extension', function () {
     $imports.$mock({
       './chrome-api': { chromeAPI: fakeChromeAPI },
       './tab-state': { TabState: FakeTabState },
-      './tab-store': { TabStore: createConstructor(fakeTabStore) },
       './help-page': { HelpPage: createConstructor(fakeHelpPage) },
       './browser-action': {
         BrowserAction: createConstructor(fakeBrowserAction),
@@ -140,35 +133,9 @@ describe('Extension', function () {
     $imports.$restore();
   });
 
-  describe('#install', function () {
-    let tabs;
-    let savedState;
-
-    beforeEach(function () {
-      tabs = [];
-      savedState = {
-        1: {
-          state: 'active',
-        },
-      };
-      tabs.push({ id: 1, url: 'http://example.com' });
-      fakeChromeAPI.tabs.query.resolves(tabs);
-      fakeTabStore.all = sandbox.stub().returns(savedState);
-    });
-
-    it('restores the saved tab states', async () => {
-      await ext.install();
-      assert.called(fakeTabStore.reload);
-      assert.calledWith(fakeTabState.load, savedState);
-    });
-
-    it('applies the saved state to open tabs', async () => {
-      fakeTabState.getState = sandbox.stub().returns(savedState[1]);
-      fakeChromeAPI.tabs.get.resolves({ id: 1 });
-
-      await ext.install();
-
-      assert.calledWith(fakeBrowserAction.update, 1, savedState[1]);
+  describe('#initTabStates', () => {
+    it('initializes state of existing tabs', () => {
+      // TODO
     });
   });
 

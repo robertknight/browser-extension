@@ -6,35 +6,9 @@ describe('TabState', () => {
 
   beforeEach(() => {
     onChange = sinon.spy();
-    state = new TabState(
-      {
-        1: { state: 'active' },
-      },
-      onChange
-    );
-  });
-
-  it('can be initialized without any default state', () => {
-    assert.doesNotThrow(() => {
-      state = new TabState(null, onChange);
-      state.isTabActive(1);
-    });
-  });
-
-  it('can be initialized without an onchange callback', () => {
-    assert.doesNotThrow(() => {
-      state = new TabState();
-      state.isTabActive(1);
-    });
-  });
-
-  describe('#load', () => {
-    it('replaces the current tab states with a new object', () => {
-      state.load({ 2: { state: 'inactive' } });
-      // `load` (re)sets all tabs to their default state, which is inactive
-      assert.equal(state.isTabActive(1), false);
-      assert.equal(state.isTabInactive(2), true);
-    });
+    state = new TabState(onChange);
+    state.setState(1, { state: 'active' });
+    onChange.resetHistory();
   });
 
   describe('#activateTab', () => {
