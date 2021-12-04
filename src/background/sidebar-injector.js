@@ -24,6 +24,20 @@ function setClientConfig(config) {
 }
 
 /**
+ * Function that is run in a frame to test whether the Hypothesis client is
+ * active there.
+ *
+ * @param {string} extensionURL - Root URL for the extension, of the form
+ *   "chrome-extension://{ID}/".
+ */
+function isClientActive(extensionURL) {
+  const annotatorLink = /** @type {HTMLLinkElement|null} */ (
+    document.querySelector('link[type="application/annotator+html"]')
+  );
+  return annotatorLink?.href.startsWith(extensionURL) ?? false;
+}
+
+/**
  * A Chrome tab for which we have ID and URL information.
  *
  * This type avoids the need to check everywhere we access these properties.
@@ -54,6 +68,55 @@ function checkTab(tab) {
  */
 export function SidebarInjector() {
   const pdfViewerBaseURL = chromeAPI.runtime.getURL('/pdfjs/web/viewer.html');
+
+  /**
+   * Check for the presence of the client in a browser tab.
+   *
+   * If code cannot be run in this tab to check the state of the client, it is
+   * assumed not to be active.
+   *
+   * @param {chrome.tabs.Tab} tab
+   * @return {Promise<boolean>}
+   */
+  this.isClientActiveInTab = async tab => {
+    const tab_ = checkTab(tab);
+
+    // If this is our PDF viewer, the client is definitely active.
+    if (isPDFViewerURL(tab_.url)) {
+      return true;
+    }
+
+    // In the VitalSource book reader, we need to test a specific frame.
+    let frameId;
+    if (isVitalSourceURL(tab_.url)) {
+      const vsFrame = await getVitalSourceViewerFrame(tab_, {
+        // If we don't have permissions to query frames in the page, make this
+        // call fail and we'll return false.
+        requestPermissions: false,
+      });
+      if (vsFrame) {
+        frameId = vsFrame.frameId;
+      }
+    }
+
+    try {
+      const extensionURL = chromeAPI.runtime.getURL('/');
+      const isActive = await executeFunction({
+        tabId: tab_.id,
+        frameId,
+        func: isClientActive,
+        args: [extensionURL],
+      });
+      return isActive;
+    } catch (err) {
+      // We failed to run code in this tab, eg. because it is a URL that disallows
+      // extension scripting or it is being unloaded.
+      //
+      // TODO - Warn here if this is not one of the known errors that can cause
+      // running code in a tab to fail.
+      return false;
+    }
+  };
 
   /**
    * Injects the Hypothesis sidebar into the tab provided.
@@ -325,8 +388,15 @@ export function SidebarInjector() {
    *     |- jigsaw.vitalsource.com (Content of current chapter)
    *
    * @param {Tab} tab
+   * @param {object} options
+   *   @param {boolean} [options.requestPermissions] - Whether to request the `webNavigation`
+   *     permission from the user to query frames, if not already granted.
+   * @return {Promise<chrome.webNavigation.GetAllFrameResultDetails|undefined>}
    */
-  async function getVitalSourceViewerFrame(tab) {
+  async function getVitalSourceViewerFrame(
+    tab,
+    { requestPermissions = true } = {}
+  ) {
     // Using `chrome.webNavigation.getAllFrames` requires asking for the
     // `webNavigation` permission which results in a scary prompt about reading
     // browser history, even though we only want to get frames for the current
@@ -341,7 +411,7 @@ export function SidebarInjector() {
     let canUseWebNavigation = (
       await chromeAPI.permissions.getAll()
     ).permissions?.includes('webNavigation');
-    if (!canUseWebNavigation) {
+    if (!canUseWebNavigation && requestPermissions) {
       canUseWebNavigation = await chromeAPI.permissions.request({
         permissions: ['webNavigation'],
       });

@@ -165,6 +165,10 @@ describe('SidebarInjector', function () {
     $imports.$restore();
   });
 
+  describe('#isClientActiveInTab', () => {
+    // TODO
+  });
+
   describe('.injectIntoTab', function () {
     const urls = [
       'chrome://version',
